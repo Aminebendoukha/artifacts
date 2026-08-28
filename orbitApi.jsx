@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRole } from "./roleContext.jsx";
+import { TOKEN_KEY } from "./AuthProvider.jsx";
 import {
   normalizeActivity,
   normalizeClient,
@@ -10,7 +10,10 @@ import {
   statusValueFromLabel,
 } from "./orderConstants.jsx";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  import.meta.env.VITE_API_BASE_URL ??
+  "http://localhost:3001/api";
 
 class ApiError extends Error {
   constructor(message, status, payload) {
@@ -21,11 +24,13 @@ class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, role } = {}) {
+async function request(path, { method = "GET", body } = {}) {
   const headers = {};
 
-  if (role) {
-    headers["x-mock-role"] = role.toUpperCase();
+  const token = localStorage.getItem(TOKEN_KEY);
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const options = { method, headers };
@@ -38,11 +43,28 @@ async function request(path, { method = "GET", body, role } = {}) {
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, options);
+
   const text = await response.text();
   const payload = text ? safeParseJson(text) : null;
 
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("orbit_user");
+
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      window.location.href = "/login";
+    }
+  }
+
   if (!response.ok) {
-    throw new ApiError(payload?.error ?? "Request failed.", response.status, payload);
+    throw new ApiError(
+      payload?.error ?? "Request failed.",
+      response.status,
+      payload,
+    );
   }
 
   return payload;
@@ -57,93 +79,88 @@ function safeParseJson(text) {
 }
 
 export function useOrdersQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["orders", role],
-    queryFn: async () => normalizeOrders(await request("/orders", { role })),
+    queryKey: ["orders"],
+    queryFn: async () => normalizeOrders(await request("/orders")),
     staleTime: 30_000,
   });
 }
 
 export function useOrderQuery(orderId, options = {}) {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["order", orderId, role],
+    queryKey: ["order", orderId],
     enabled: Boolean(orderId) && (options.enabled ?? true),
-    queryFn: async () => normalizeOrder(await request(`/orders/${orderId}`, { role })),
+    queryFn: async () =>
+      normalizeOrder(await request(`/orders/${orderId}`)),
   });
 }
 
 export function useOrderThreadQuery(orderId, options = {}) {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["thread", orderId, role],
+    queryKey: ["thread", orderId],
     enabled: Boolean(orderId) && (options.enabled ?? true),
     queryFn: async () => {
-      const thread = await request(`/orders/${orderId}/thread`, { role });
+      const thread = await request(`/orders/${orderId}/thread`);
+
       return {
-        comments: Array.isArray(thread.comments) ? thread.comments.map(normalizeComment).filter(Boolean) : [],
-        activities: Array.isArray(thread.activities) ? thread.activities.map(normalizeActivity).filter(Boolean) : [],
+        comments: Array.isArray(thread.comments)
+          ? thread.comments.map(normalizeComment).filter(Boolean)
+          : [],
+        activities: Array.isArray(thread.activities)
+          ? thread.activities.map(normalizeActivity).filter(Boolean)
+          : [],
       };
     },
   });
 }
 
 export function useNotificationsQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["notifications", role],
-    queryFn: async () => (await request("/notifications", { role })) ?? [],
+    queryKey: ["notifications"],
+    queryFn: async () => (await request("/notifications")) ?? [],
     refetchInterval: 30_000,
   });
 }
 
 export function useInvoicesQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["invoices", role],
-    queryFn: async () => (await request("/invoices", { role })).map(normalizeInvoice),
+    queryKey: ["invoices"],
+    queryFn: async () =>
+      (await request("/invoices")).map(normalizeInvoice),
   });
 }
 
 export function useAdminMetricsQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["admin-metrics", role],
-    queryFn: async () => await request("/admin/metrics", { role }),
+    queryKey: ["admin-metrics"],
+    queryFn: async () => request("/admin/metrics"),
   });
 }
 
 export function useAdminAnalyticsQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["admin-analytics", role],
-    queryFn: async () => await request("/admin/analytics", { role }),
+    queryKey: ["admin-analytics"],
+    queryFn: async () => request("/admin/analytics"),
   });
 }
 
 export function useClientsQuery() {
-  const { role } = useRole();
-
   return useQuery({
-    queryKey: ["clients", role],
-    queryFn: async () => (await request("/admin/clients", { role })).map(normalizeClient),
+    queryKey: ["clients"],
+    queryFn: async () =>
+      (await request("/admin/clients")).map(normalizeClient),
   });
 }
 
 export function useCreateClientWorkspaceMutation() {
-  const { role } = useRole();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ name }) => await request("/admin/clients", { method: "POST", body: { name }, role }),
+    mutationFn: async ({ name }) =>
+      request("/admin/clients", {
+        method: "POST",
+        body: { name },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -152,11 +169,16 @@ export function useCreateClientWorkspaceMutation() {
 }
 
 export function useCreateOrderMutation() {
-  const { role } = useRole();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload) => normalizeOrder(await request("/orders", { method: "POST", body: payload, role })),
+    mutationFn: async (payload) =>
+      normalizeOrder(
+        await request("/orders", {
+          method: "POST",
+          body: payload,
+        }),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -168,21 +190,24 @@ export function useCreateOrderMutation() {
 }
 
 export function useUpdateOrderStatusMutation() {
-  const { role } = useRole();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status }) => normalizeOrder(
-      await request(`/orders/${id}/status`, {
-        method: "PATCH",
-        body: { status: statusValueFromLabel(status) },
-        role,
-      })
-    ),
+    mutationFn: async ({ id, status }) =>
+      normalizeOrder(
+        await request(`/orders/${id}/status`, {
+          method: "PATCH",
+          body: { status: statusValueFromLabel(status) },
+        }),
+      ),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["order", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["order", variables.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["thread", variables.id],
+      });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       queryClient.invalidateQueries({ queryKey: ["admin-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["admin-analytics"] });
@@ -192,15 +217,21 @@ export function useUpdateOrderStatusMutation() {
 }
 
 export function useAddOrderCommentMutation() {
-  const { role } = useRole();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ orderId, text, attachments = [] }) =>
-      await request(`/orders/${orderId}/comments`, { method: "POST", body: { text, attachments }, role }),
+      request(`/orders/${orderId}/comments`, {
+        method: "POST",
+        body: { text, attachments },
+      }),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.orderId] });
-      queryClient.invalidateQueries({ queryKey: ["order", variables.orderId] });
+      queryClient.invalidateQueries({
+        queryKey: ["thread", variables.orderId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["order", variables.orderId],
+      });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -208,23 +239,27 @@ export function useAddOrderCommentMutation() {
 }
 
 export function useUploadFileMutation() {
-  const { role } = useRole();
-
   return useMutation({
     mutationFn: async (file) => {
       const formData = new FormData();
       formData.append("file", file);
-      return await request("/upload", { method: "POST", body: formData, role });
+
+      return request("/upload", {
+        method: "POST",
+        body: formData,
+      });
     },
   });
 }
 
 export function usePayInvoiceMutation() {
-  const { role } = useRole();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ invoiceId }) => await request(`/invoices/${invoiceId}/pay`, { method: "PATCH", role }),
+    mutationFn: async ({ invoiceId }) =>
+      request(`/invoices/${invoiceId}/pay`, {
+        method: "PATCH",
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
