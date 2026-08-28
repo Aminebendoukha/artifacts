@@ -1,9 +1,12 @@
 // backend/src/routes/auth.js
-// Real JWT auth routes: POST /api/auth/register, POST /api/auth/login
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { PrismaClient } = require("@prisma/client");
+// Real JWT auth routes: POST /api/auth/register, POST /api/auth/login, GET /api/auth/me
+// Mounted BEFORE the global `auth` middleware in app.js, so register/login are
+// public; /me protects itself by requiring the auth middleware explicitly.
+import express from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -32,6 +35,7 @@ function sanitizeUser(user) {
 /**
  * POST /api/auth/register
  * body: { email, password, companyName, role }
+ * role: "CLIENT" | "ADMIN"
  */
 router.post("/register", async (req, res, next) => {
   try {
@@ -82,6 +86,7 @@ router.post("/register", async (req, res, next) => {
 /**
  * POST /api/auth/login
  * body: { email, password }
+ * Returns a signed JWT with payload { userId, role, workspaceId }.
  */
 router.post("/login", async (req, res, next) => {
   try {
@@ -110,11 +115,11 @@ router.post("/login", async (req, res, next) => {
 
 /**
  * GET /api/auth/me
- * Returns the currently authenticated user (used by the frontend AuthProvider
- * to rehydrate session state on page load from a stored token).
+ * Used by the frontend AuthProvider to rehydrate session state on page load.
+ * Requires the auth middleware explicitly since this router is mounted
+ * before the global `app.use(auth)` call in app.js.
  */
-const authMiddleware = require("../middleware/auth");
-router.get("/me", authMiddleware, async (req, res, next) => {
+router.get("/me", auth, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
     if (!user) {
@@ -126,4 +131,4 @@ router.get("/me", authMiddleware, async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
 // backend/src/middleware/auth.js
 // Real JWT authentication middleware — replaces mockAuth.js
-const jwt = require("jsonwebtoken");
+import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -12,9 +12,11 @@ if (!JWT_SECRET) {
 
 /**
  * Verifies the `Authorization: Bearer <token>` header and attaches the
- * decoded payload to req.user as { userId, role, workspaceId }.
+ * decoded payload to req.user as { userId, role, workspaceId, email }.
+ * Mounted globally in app.js via `app.use(auth)` for every route declared
+ * after it (orders, invoices, admin, activities, notifications, uploads).
  */
-function authMiddleware(req, res, next) {
+export function auth(req, res, next) {
   const header = req.headers.authorization || "";
   const [scheme, token] = header.split(" ");
 
@@ -40,9 +42,9 @@ function authMiddleware(req, res, next) {
 }
 
 /**
- * Optional role guard. Usage: router.get('/admin-only', auth, requireRole('ADMIN'), handler)
+ * Optional role guard. Usage: router.get("/admin-only", requireRole("ADMIN"), handler)
  */
-function requireRole(...allowedRoles) {
+export function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: "Not authenticated." });
@@ -53,6 +55,3 @@ function requireRole(...allowedRoles) {
     return next();
   };
 }
-
-module.exports = authMiddleware;
-module.exports.requireRole = requireRole;
