@@ -1,7 +1,10 @@
-/** @type {import('tailwindcss').Config} */
+/** @type {import("tailwindcss").Config} */
 export default {
   darkMode: "class",
-  content: ["./index.html", "./App.jsx", "./Layout.jsx", "./AdminDashboard.jsx", "./ClientDashboard.jsx", "./NewOrder.jsx", "./OrderDetails.jsx", "./main.jsx", "./ui.jsx", "./orbitApi.jsx", "./orderConstants.jsx", "./roleContext.jsx"],
+  content: [
+    "./index.html",
+    "./*.{js,jsx}",
+  ],
   theme: {
     extend: {
       colors: {
