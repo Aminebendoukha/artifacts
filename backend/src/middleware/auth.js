@@ -12,7 +12,9 @@ if (!JWT_SECRET) {
 
 /**
  * Verifies the `Authorization: Bearer <token>` header and attaches the
- * decoded payload to req.user as { userId, role, workspaceId, email }.
+ * decoded payload to req.user as { id, role, workspaceId, email }.
+ * NOTE: uses `id` (not `userId`) to match how orders.js/invoices.js/etc.
+ * already consume req.user (e.g. `createdById: req.user.id`).
  * Mounted globally in app.js via `app.use(auth)` for every route declared
  * after it (orders, invoices, admin, activities, notifications, uploads).
  */
@@ -27,7 +29,7 @@ export function auth(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = {
-      userId: decoded.userId,
+      id: decoded.userId,
       role: decoded.role,
       workspaceId: decoded.workspaceId,
       email: decoded.email,
