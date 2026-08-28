@@ -1,10 +1,11 @@
+// src/Layout.jsx
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Boxes,
   Bell,
-  ChevronDown,
   LayoutDashboard,
+  LogOut,
   Menu,
   MoonStar,
   PlusCircle,
@@ -13,18 +14,19 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "./ui.jsx";
-import { useRole } from "./roleContext.jsx";
+import { useAuth } from "./AuthProvider.jsx";
 import { useTheme } from "./themeContext.jsx";
 import { useNotificationsQuery } from "./orbitApi.jsx";
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const { role, setRole } = useRole();
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const { data: notifications = [] } = useNotificationsQuery();
+
+  const role = user?.role === "ADMIN" ? "admin" : "client";
 
   const clientLinks = [
     { to: "/client", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -37,11 +39,12 @@ export default function Layout({ children }) {
   ];
   const links = role === "client" ? clientLinks : adminLinks;
 
-  function switchRole(newRole) {
-    setRole(newRole);
-    setRoleMenuOpen(false);
-    navigate(newRole === "client" ? "/client" : "/admin");
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
   }
+
+  const initial = user?.email ? user.email.charAt(0).toUpperCase() : "?";
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors">
@@ -87,8 +90,7 @@ export default function Layout({ children }) {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
           <div className="rounded-lg bg-slate-50 dark:bg-slate-800 p-3 text-xs text-slate-500 dark:text-slate-300">
-            Viewing as <span className="font-semibold text-slate-700 dark:text-slate-100">{role === "client" ? "Client" : "Admin"}</span>.
-            Switch roles from the header.
+            Signed in as <span className="font-semibold text-slate-700 dark:text-slate-100">{user?.email}</span>
           </div>
         </div>
       </aside>
@@ -149,31 +151,20 @@ export default function Layout({ children }) {
             {theme === "dark" ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
           </button>
 
-          <div className="relative">
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{user?.email}</p>
+              <p className="text-xs text-slate-400">{user?.role === "ADMIN" ? "Admin" : "Client"}</p>
+            </div>
+            <div className="h-9 w-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold">
+              {initial}
+            </div>
             <button
-              onClick={() => setRoleMenuOpen((value) => !value)}
+              onClick={handleLogout}
               className="flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              <span className={cn("h-2 w-2 rounded-full", role === "client" ? "bg-indigo-500" : "bg-emerald-500")} />
-              {role === "client" ? "Client View" : "Admin View"}
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <LogOut className="h-4 w-4" /> Logout
             </button>
-            {roleMenuOpen && (
-              <div className="absolute right-0 mt-2 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg py-1 z-30">
-                <button
-                  onClick={() => switchRole("client")}
-                  className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                >
-                  <span className="h-2 w-2 rounded-full bg-indigo-500" /> Client View
-                </button>
-                <button
-                  onClick={() => switchRole("admin")}
-                  className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                >
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" /> Admin View
-                </button>
-              </div>
-            )}
           </div>
         </header>
 

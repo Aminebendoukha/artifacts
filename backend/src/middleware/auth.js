@@ -1,48 +1,58 @@
-import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma.js";
-import { ApiError } from "./errorHandler.js";
+// backend/src/middleware/auth.js
+// Real JWT authentication middleware — replaces mockAuth.js
+const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "orbit-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET;
 
-export async function auth(req, _res, next) {
+if (!JWT_SECRET) {
+  console.warn(
+    "[auth] WARNING: JWT_SECRET is not set in backend/.env. Add JWT_SECRET=<a-long-random-string> before starting the server."
+  );
+}
+
+/**
+ * Verifies the `Authorization: Bearer <token>` header and attaches the
+ * decoded payload to req.user as { userId, role, workspaceId }.
+ */
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({ error: "Missing or malformed Authorization header." });
+  }
+
   try {
-    const authHeader = req.header("authorization") ?? req.header("Authorization") ?? "";
-    const [scheme, token] = authHeader.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new ApiError(401, "Authentication required.");
-    }
-
-    const payload = jwt.verify(token, JWT_SECRET);
-    if (!payload?.userId) {
-      throw new ApiError(401, "Invalid token.");
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        workspaceId: true,
-        workspace: { select: { id: true, name: true } },
-      },
-    });
-
-    if (!user) {
-      throw new ApiError(401, "User not found.");
-    }
-
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      workspaceId: user.workspaceId,
-      workspaceName: user.workspace.name,
+      userId: decoded.userId,
+      role: decoded.role,
+      workspaceId: decoded.workspaceId,
+      email: decoded.email,
     };
-
-    next();
-  } catch (error) {
-    next(error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError ? new ApiError(401, "Invalid or expired token.") : error);
+    return next();
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Token expired. Please log in again." });
+    }
+    return res.status(401).json({ error: "Invalid token." });
   }
 }
+
+/**
+ * Optional role guard. Usage: router.get('/admin-only', auth, requireRole('ADMIN'), handler)
+ */
+function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Not authenticated." });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: "You do not have permission to access this resource." });
+    }
+    return next();
+  };
+}
+
+module.exports = authMiddleware;
+module.exports.requireRole = requireRole;
