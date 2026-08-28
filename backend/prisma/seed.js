@@ -11,7 +11,8 @@ const adminUserId = process.env.MOCK_ADMIN_USER_ID ?? "22222222-2222-2222-2222-2
 const clientUserId = process.env.MOCK_CLIENT_USER_ID ?? "33333333-3333-3333-3333-333333333333";
 
 async function main() {
-  const passwordHash = await bcrypt.hash("atlas1234", 10);
+  const adminPasswordHash = await bcrypt.hash("admin1234", 10);
+  const clientPasswordHash = await bcrypt.hash("client1234", 10);
 
   await prisma.attachment.deleteMany();
   await prisma.orderActivity.deleteMany();
@@ -33,14 +34,14 @@ async function main() {
       {
         id: adminUserId,
         email: "admin@atlas.example",
-        passwordHash,
+        passwordHash: adminPasswordHash,
         role: "ADMIN",
         workspaceId,
       },
       {
         id: clientUserId,
         email: "client@atlas.example",
-        passwordHash,
+        passwordHash: clientPasswordHash,
         role: "CLIENT",
         workspaceId,
       },
