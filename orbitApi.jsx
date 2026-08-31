@@ -10,10 +10,7 @@ import {
   statusValueFromLabel,
 } from "./orderConstants.jsx";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ??
-  import.meta.env.VITE_API_BASE_URL ??
-  "http://localhost:3001/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001/api";
 
 class ApiError extends Error {
   constructor(message, status, payload) {
@@ -26,47 +23,29 @@ class ApiError extends Error {
 
 async function request(path, { method = "GET", body } = {}) {
   const headers = {};
-
   const token = localStorage.getItem(TOKEN_KEY);
-
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
-
   const options = { method, headers };
-
   if (body instanceof FormData) {
     options.body = body;
   } else if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
   }
-
   const response = await fetch(`${API_BASE_URL}${path}`, options);
-
-  const text = await response.text();
-  const payload = text ? safeParseJson(text) : null;
-
   if (response.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem("orbit_user");
-
-    if (
-      typeof window !== "undefined" &&
-      window.location.pathname !== "/login"
-    ) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       window.location.href = "/login";
     }
   }
-
+  const text = await response.text();
+  const payload = text ? safeParseJson(text) : null;
   if (!response.ok) {
-    throw new ApiError(
-      payload?.error ?? "Request failed.",
-      response.status,
-      payload,
-    );
+    throw new ApiError(payload?.error ?? "Request failed.", response.status, payload);
   }
-
   return payload;
 }
 
@@ -90,8 +69,7 @@ export function useOrderQuery(orderId, options = {}) {
   return useQuery({
     queryKey: ["order", orderId],
     enabled: Boolean(orderId) && (options.enabled ?? true),
-    queryFn: async () =>
-      normalizeOrder(await request(`/orders/${orderId}`)),
+    queryFn: async () => normalizeOrder(await request(`/orders/${orderId}`)),
   });
 }
 
@@ -101,14 +79,9 @@ export function useOrderThreadQuery(orderId, options = {}) {
     enabled: Boolean(orderId) && (options.enabled ?? true),
     queryFn: async () => {
       const thread = await request(`/orders/${orderId}/thread`);
-
       return {
-        comments: Array.isArray(thread.comments)
-          ? thread.comments.map(normalizeComment).filter(Boolean)
-          : [],
-        activities: Array.isArray(thread.activities)
-          ? thread.activities.map(normalizeActivity).filter(Boolean)
-          : [],
+        comments: Array.isArray(thread.comments) ? thread.comments.map(normalizeComment).filter(Boolean) : [],
+        activities: Array.isArray(thread.activities) ? thread.activities.map(normalizeActivity).filter(Boolean) : [],
       };
     },
   });
@@ -125,8 +98,7 @@ export function useNotificationsQuery() {
 export function useInvoicesQuery() {
   return useQuery({
     queryKey: ["invoices"],
-    queryFn: async () =>
-      (await request("/invoices")).map(normalizeInvoice),
+    queryFn: async () => (await request("/invoices")).map(normalizeInvoice),
   });
 }
 
@@ -147,20 +119,14 @@ export function useAdminAnalyticsQuery() {
 export function useClientsQuery() {
   return useQuery({
     queryKey: ["clients"],
-    queryFn: async () =>
-      (await request("/admin/clients")).map(normalizeClient),
+    queryFn: async () => (await request("/admin/clients")).map(normalizeClient),
   });
 }
 
 export function useCreateClientWorkspaceMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async ({ name }) =>
-      request("/admin/clients", {
-        method: "POST",
-        body: { name },
-      }),
+    mutationFn: async ({ name }) => request("/admin/clients", { method: "POST", body: { name } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -170,15 +136,8 @@ export function useCreateClientWorkspaceMutation() {
 
 export function useCreateOrderMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async (payload) =>
-      normalizeOrder(
-        await request("/orders", {
-          method: "POST",
-          body: payload,
-        }),
-      ),
+    mutationFn: async (payload) => normalizeOrder(await request("/orders", { method: "POST", body: payload })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -191,7 +150,6 @@ export function useCreateOrderMutation() {
 
 export function useUpdateOrderStatusMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ id, status }) =>
       normalizeOrder(
@@ -202,12 +160,8 @@ export function useUpdateOrderStatusMutation() {
       ),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({
-        queryKey: ["order", variables.id],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["thread", variables.id],
-      });
+      queryClient.invalidateQueries({ queryKey: ["order", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       queryClient.invalidateQueries({ queryKey: ["admin-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["admin-analytics"] });
@@ -218,20 +172,12 @@ export function useUpdateOrderStatusMutation() {
 
 export function useAddOrderCommentMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ orderId, text, attachments = [] }) =>
-      request(`/orders/${orderId}/comments`, {
-        method: "POST",
-        body: { text, attachments },
-      }),
+      request(`/orders/${orderId}/comments`, { method: "POST", body: { text, attachments } }),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["thread", variables.orderId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["order", variables.orderId],
-      });
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.orderId] });
+      queryClient.invalidateQueries({ queryKey: ["order", variables.orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
@@ -243,23 +189,15 @@ export function useUploadFileMutation() {
     mutationFn: async (file) => {
       const formData = new FormData();
       formData.append("file", file);
-
-      return request("/upload", {
-        method: "POST",
-        body: formData,
-      });
+      return request("/upload", { method: "POST", body: formData });
     },
   });
 }
 
 export function usePayInvoiceMutation() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async ({ invoiceId }) =>
-      request(`/invoices/${invoiceId}/pay`, {
-        method: "PATCH",
-      }),
+    mutationFn: async ({ invoiceId }) => request(`/invoices/${invoiceId}/pay`, { method: "PATCH" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
