@@ -19,10 +19,13 @@ export function errorHandler(err, req, res, next) {
     return next(err);
   }
 
-  let status = err.status ?? err.statusCode ?? 500;
-  let message = err.message ?? "Internal server error.";
+  let status = 500;
+  let message = "Internal server error.";
 
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+  if (err instanceof ApiError) {
+    status = err.status;
+    message = err.message;
+  } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2025") {
       status = 404;
       message = "Record not found.";
@@ -30,11 +33,17 @@ export function errorHandler(err, req, res, next) {
       status = 409;
       message = "A record with the same unique value already exists.";
     }
-  }
-
-  if (err.name === "MulterError") {
+  } else if (err.name === "MulterError") {
     status = 400;
+    message = "The uploaded file could not be processed.";
   }
 
-  res.status(status).json({ error: message, status });
+  if (status >= 500) {
+    console.error(err);
+  }
+
+  res.status(status).json({
+    error: message,
+    status,
+  });
 }

@@ -1,7 +1,3 @@
-// backend/src/routes/auth.js
-// Real JWT auth routes: POST /api/auth/register, POST /api/auth/login, GET /api/auth/me
-// Mounted BEFORE the global `auth` middleware in app.js, so register/login are
-// public; /me protects itself by requiring the auth middleware explicitly.
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -13,8 +9,16 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_WORKSPACE_NAME_LENGTH = 120;
 
 function signToken(user) {
+  if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured.");
+  }
+
   return jwt.sign(
     {
       userId: user.id,
@@ -23,7 +27,7 @@ function signToken(user) {
       email: user.email,
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { expiresIn: JWT_EXPIRES_IN },
   );
 }
 
@@ -32,99 +36,164 @@ function sanitizeUser(user) {
   return safe;
 }
 
-/**
+function normalizeEmail(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeWorkspaceName(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function validatePassword(password) {
+  if (typeof password !== "string") {
+    throw new ApiError(400, "Password is required.");
+  }
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new ApiError(
+      400,
+      `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`,
+    );
+  }
+
+  if (password.length > 128) {
+    throw new ApiError(400, "Password must be 128 characters or fewer.");
+  }
+
+  if (!/[a-z]/.test(password)) {
+    throw new ApiError(400, "Password must include a lowercase letter.");
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    throw new ApiError(400, "Password must include an uppercase letter.");
+  }
+
+  if (!/\d/.test(password)) {
+    throw new ApiError(400, "Password must include a number.");
+  }
+}
+
+function validateEmail(email) {
+  if (!email) {
+    throw new ApiError(400, "Email is required.");
+  }
+
+  if (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)) {
+    throw new ApiError(400, "Enter a valid email address.");
+  }
+}
+
+/*
  * POST /api/auth/register
- * body: { email, password, companyName, role }
- * role: "CLIENT" | "ADMIN"
+ * Public registration is deliberately client-only.
+ * Never accept a client-controlled role in a public endpoint.
  */
 router.post("/register", async (req, res, next) => {
   try {
-    const { email, password, companyName, role } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email);
+    const companyName = normalizeWorkspaceName(req.body?.companyName);
+    const password = req.body?.password;
 
-    if (!email || !password || !companyName || !role) {
-      throw new ApiError(400, "email, password, companyName, and role are required.");
+    validateEmail(email);
+    validatePassword(password);
+
+    if (!companyName) {
+      throw new ApiError(400, "Workspace name is required.");
     }
 
-    if (!["CLIENT", "ADMIN"].includes(role)) {
-      throw new ApiError(400, "role must be either CLIENT or ADMIN.");
+    if (companyName.length > MAX_WORKSPACE_NAME_LENGTH) {
+      throw new ApiError(
+        400,
+        `Workspace name must be ${MAX_WORKSPACE_NAME_LENGTH} characters or fewer.`,
+      );
     }
 
-    if (password.length < 8) {
-      throw new ApiError(400, "Password must be at least 8 characters long.");
-    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      throw new ApiError(409, "An account with this email already exists.");
+    if (existingUser) {
+      throw new ApiError(
+        409,
+        "An account with this email already exists. Please sign in instead.",
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const created = await prisma.$transaction(async (tx) => {
-      let workspace = await tx.workspace.findFirst({ where: { name: companyName } });
-      if (!workspace || role === "CLIENT") {
-        workspace = await tx.workspace.create({ data: { name: companyName } });
-      }
+    const createdUser = await prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: { name: companyName },
+      });
 
       return tx.user.create({
         data: {
           email,
           passwordHash,
-          role,
+          role: "CLIENT",
           workspaceId: workspace.id,
         },
       });
     });
 
-    const token = signToken(created);
-    res.status(201).json({ token, user: sanitizeUser(created) });
+    const token = signToken(createdUser);
+
+    res.status(201).json({
+      token,
+      user: sanitizeUser(createdUser),
+    });
   } catch (error) {
     next(error);
   }
 });
 
-/**
- * POST /api/auth/login
- * body: { email, password }
- * Returns a signed JWT with payload { userId, role, workspaceId }.
- */
 router.post("/login", async (req, res, next) => {
   try {
-    const { email, password } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email);
+    const password = req.body?.password;
 
-    if (!email || !password) {
-      throw new ApiError(400, "email and password are required.");
+    validateEmail(email);
+
+    if (typeof password !== "string" || !password) {
+      throw new ApiError(400, "Password is required.");
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (!user) {
       throw new ApiError(401, "Invalid email or password.");
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
+    const validPassword = await bcrypt.compare(password, user.passwordHash);
+
+    if (!validPassword) {
       throw new ApiError(401, "Invalid email or password.");
     }
 
     const token = signToken(user);
-    res.json({ token, user: sanitizeUser(user) });
+
+    res.json({
+      token,
+      user: sanitizeUser(user),
+    });
   } catch (error) {
     next(error);
   }
 });
 
-/**
- * GET /api/auth/me
- * Used by the frontend AuthProvider to rehydrate session state on page load.
- * Requires the auth middleware explicitly since this router is mounted
- * before the global `app.use(auth)` call in app.js.
- */
 router.get("/me", auth, async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+    });
+
     if (!user) {
       throw new ApiError(404, "User not found.");
     }
+
     res.json({ user: sanitizeUser(user) });
   } catch (error) {
     next(error);
