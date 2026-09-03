@@ -5,8 +5,8 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-  console.warn(
-    "[auth] WARNING: JWT_SECRET is not set in backend/.env. Add JWT_SECRET=<a-long-random-string> before starting the server."
+  throw new Error(
+    "JWT_SECRET is required. Add a strong random value to backend/.env before starting the server."
   );
 }
 
