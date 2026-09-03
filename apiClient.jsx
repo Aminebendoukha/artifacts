@@ -1,17 +1,32 @@
+// apiClient.jsx
+import { TOKEN_KEY } from "./AuthProvider.jsx";
 
-import { API_BASE, TOKEN_KEY } from "./AuthProvider.jsx";
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:3001/api";
 
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
 
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  let body = options.body;
+
+  // If body is a plain object/array, serialize to JSON.
+  // If it's FormData (for uploads), let the browser set headers/body.
+  if (body && !(body instanceof FormData)) {
+    body = JSON.stringify(body);
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers,
+    body,
   });
 
   if (res.status === 401) {
@@ -31,3 +46,4 @@ export async function apiFetch(path, options = {}) {
   return data;
 }
 
+export { API_BASE, TOKEN_KEY };

@@ -1,5 +1,6 @@
+// orbitApi.jsx
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TOKEN_KEY } from "./AuthProvider.jsx";
+import { apiFetch } from "./apiClient.jsx";
 import {
   normalizeActivity,
   normalizeClient,
@@ -9,8 +10,6 @@ import {
   normalizeOrders,
   statusValueFromLabel,
 } from "./orderConstants.jsx";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001/api";
 
 class ApiError extends Error {
   constructor(message, status, payload) {
@@ -22,38 +21,15 @@ class ApiError extends Error {
 }
 
 async function request(path, { method = "GET", body } = {}) {
-  const headers = {};
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  const options = { method, headers };
-  if (body instanceof FormData) {
-    options.body = body;
-  } else if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    options.body = JSON.stringify(body);
-  }
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
-  if (response.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-  }
-  const text = await response.text();
-  const payload = text ? safeParseJson(text) : null;
-  if (!response.ok) {
-    throw new ApiError(payload?.error ?? "Request failed.", response.status, payload);
-  }
-  return payload;
-}
-
-function safeParseJson(text) {
   try {
-    return JSON.parse(text);
-  } catch {
-    return text;
+    const data = await apiFetch(path, { method, body });
+    return data;
+  } catch (err) {
+    // Wrap generic errors as ApiError where possible
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    throw new ApiError(err.message || "Request failed.", 0, null);
   }
 }
 
@@ -80,8 +56,12 @@ export function useOrderThreadQuery(orderId, options = {}) {
     queryFn: async () => {
       const thread = await request(`/orders/${orderId}/thread`);
       return {
-        comments: Array.isArray(thread.comments) ? thread.comments.map(normalizeComment).filter(Boolean) : [],
-        activities: Array.isArray(thread.activities) ? thread.activities.map(normalizeActivity).filter(Boolean) : [],
+        comments: Array.isArray(thread.comments)
+          ? thread.comments.map(normalizeComment).filter(Boolean)
+          : [],
+        activities: Array.isArray(thread.activities)
+          ? thread.activities.map(normalizeActivity).filter(Boolean)
+          : [],
       };
     },
   });
@@ -126,7 +106,8 @@ export function useClientsQuery() {
 export function useCreateClientWorkspaceMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name }) => request("/admin/clients", { method: "POST", body: { name } }),
+    mutationFn: async ({ name }) =>
+      request("/admin/clients", { method: "POST", body: { name } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -137,7 +118,8 @@ export function useCreateClientWorkspaceMutation() {
 export function useCreateOrderMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload) => normalizeOrder(await request("/orders", { method: "POST", body: payload })),
+    mutationFn: async (payload) =>
+      normalizeOrder(await request("/orders", { method: "POST", body: payload })),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -156,7 +138,7 @@ export function useUpdateOrderStatusMutation() {
         await request(`/orders/${id}/status`, {
           method: "PATCH",
           body: { status: statusValueFromLabel(status) },
-        }),
+        })
       ),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -174,7 +156,10 @@ export function useAddOrderCommentMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ orderId, text, attachments = [] }) =>
-      request(`/orders/${orderId}/comments`, { method: "POST", body: { text, attachments } }),
+      request(`/orders/${orderId}/comments`, {
+        method: "POST",
+        body: { text, attachments },
+      }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.orderId] });
       queryClient.invalidateQueries({ queryKey: ["order", variables.orderId] });
@@ -189,7 +174,7 @@ export function useUploadFileMutation() {
     mutationFn: async (file) => {
       const formData = new FormData();
       formData.append("file", file);
-      return request("/upload", { method: "POST", body: formData });
+      return apiFetch("/upload", { method: "POST", body: formData });
     },
   });
 }
@@ -197,7 +182,8 @@ export function useUploadFileMutation() {
 export function usePayInvoiceMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ invoiceId }) => request(`/invoices/${invoiceId}/pay`, { method: "PATCH" }),
+    mutationFn: async ({ invoiceId }) =>
+      request(`/invoices/${invoiceId}/pay`, { method: "PATCH" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });

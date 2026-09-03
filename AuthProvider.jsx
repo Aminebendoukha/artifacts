@@ -1,32 +1,11 @@
-// src/AuthProvider.jsx
+// AuthProvider.jsx
 // Real JWT auth context: stores the token in localStorage, exposes
 // login/register/logout and the current user, and rehydrates the
 // session on page load via GET /api/auth/me.
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { apiFetch, TOKEN_KEY } from "./apiClient.jsx";
 
 const AuthContext = createContext(null);
-const TOKEN_KEY = "orbit_token";
-
-const API_BASE =
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
-
-async function apiRequest(path, { method = "GET", body, token } = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed with status ${res.status}`);
-  }
-  return data;
-}
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -44,7 +23,10 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async (email, password) => {
-      const data = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
+      const data = await apiFetch("/auth/login", {
+        method: "POST",
+        body: { email, password },
+      });
       persistToken(data.token);
       setUser(data.user);
       return data.user;
@@ -54,7 +36,7 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(
     async ({ email, password, companyName, role }) => {
-      const data = await apiRequest("/auth/register", {
+      const data = await apiFetch("/auth/register", {
         method: "POST",
         body: { email, password, companyName, role },
       });
@@ -72,26 +54,43 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let isMounted = true;
+
     async function rehydrate() {
-      if (!token) {
-        setLoading(false);
+      const currentToken = localStorage.getItem(TOKEN_KEY);
+
+      if (!currentToken) {
+        if (isMounted) {
+          setLoading(false);
+        }
         return;
       }
+
       try {
-        const data = await apiRequest("/auth/me", { token });
-        if (isMounted) setUser(data.user);
+        const data = await apiFetch("/auth/me", {
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+          },
+        });
+        if (isMounted) {
+          setUser(data.user);
+        }
       } catch {
-        if (isMounted) persistToken(null);
+        if (isMounted) {
+          persistToken(null);
+        }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
+
     rehydrate();
+
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [persistToken]);
 
   return (
     <AuthContext.Provider
@@ -116,4 +115,4 @@ export function useAuth() {
   return ctx;
 }
 
-export { API_BASE, TOKEN_KEY };
+export { TOKEN_KEY };
