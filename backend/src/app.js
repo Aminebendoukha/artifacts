@@ -24,6 +24,10 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+/*
+ * Trust proxy must be configured before any middleware that inspects
+ * the client IP, including rate limiting and CORS.
+ */
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
