@@ -40,8 +40,9 @@ model Workspace {
   name      String
   createdAt DateTime @default(now())
 
-  users  User[]
-  orders Order[]
+  users   User[]
+  orders  Order[]
+  invites Invite[]
 }
 
 model User {
@@ -52,11 +53,11 @@ model User {
   workspaceId  String   @db.Uuid
   createdAt    DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  createdOrders Order[] @relation("OrderCreator")
-  uploadedAttachments Attachment[] @relation("AttachmentUploader")
-  orderComments OrderComment[]
-  orderActivities OrderActivity[]
+  workspace           Workspace       @relation(fields: [workspaceId], references: [id])
+  createdOrders       Order[]         @relation("OrderCreator")
+  uploadedAttachments Attachment[]    @relation("AttachmentUploader")
+  orderComments       OrderComment[]
+  orderActivities     OrderActivity[]
 }
 
 model Order {
@@ -73,26 +74,26 @@ model Order {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  createdBy User @relation("OrderCreator", fields: [createdById], references: [id])
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id])
+  createdBy   User            @relation("OrderCreator", fields: [createdById], references: [id])
   attachments Attachment[]
-  invoices Invoice[]
-  comments OrderComment[]
-  activities OrderActivity[]
+  invoices    Invoice[]
+  comments    OrderComment[]
+  activities  OrderActivity[]
 }
 
 model Attachment {
-  id          String   @id @default(uuid()) @db.Uuid
-  fileName    String
-  fileUrl     String
-  orderId     String   @db.Uuid
-  uploadedById String  @db.Uuid
-  commentId   String?  @db.Uuid
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid()) @db.Uuid
+  fileName     String
+  fileUrl      String
+  orderId      String   @db.Uuid
+  uploadedById String   @db.Uuid
+  commentId    String?  @db.Uuid
+  createdAt    DateTime @default(now())
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  uploadedBy User @relation("AttachmentUploader", fields: [uploadedById], references: [id])
-  comment OrderComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  uploadedBy User          @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+  comment    OrderComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
 }
 
 model Invoice {
@@ -109,25 +110,45 @@ model Invoice {
 }
 
 model OrderComment {
-  id          String   @id @default(uuid()) @db.Uuid
-  orderId     String   @db.Uuid
-  userId      String   @db.Uuid
-  text        String
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  userId    String   @db.Uuid
+  text      String
+  createdAt DateTime @default(now())
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id])
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id])
   attachments Attachment[]
 }
 
 model OrderActivity {
-  id          String       @id @default(uuid()) @db.Uuid
-  orderId     String       @db.Uuid
-  userId      String?      @db.Uuid
-  type        ActivityType
-  summary     String
-  createdAt   DateTime     @default(now())
+  id        String       @id @default(uuid()) @db.Uuid
+  orderId   String       @db.Uuid
+  userId    String?      @db.Uuid
+  type      ActivityType
+  summary   String
+  createdAt DateTime     @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Invite {
+  id          String       @id @default(uuid()) @db.Uuid
+  email       String
+  workspaceId String       @db.Uuid
+  status      InviteStatus @default(PENDING)
+  token       String       @unique @default(cuid())
+  expiresAt   DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
 }

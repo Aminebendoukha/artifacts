@@ -14,6 +14,8 @@ const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const AdminClients = lazy(() => import("./AdminClients.jsx"));
 const Login = lazy(() => import("./Login.jsx"));
 const Register = lazy(() => import("./Register.jsx"));
+const InviteClient = lazy(() => import("./InviteClient.jsx"));
+const AcceptInvite = lazy(() => import("./AcceptInvite.jsx"));
 
 function RouteFallback() {
   return (
@@ -113,7 +115,15 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
+            <Route
+  path="/admin/invite"
+  element={
+    <ProtectedRoute requiredRole="ADMIN">
+      <InviteClient />
+    </ProtectedRoute>
+  }
+/>
+            <Route path="/invite/:token" element={<AcceptInvite />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -34,9 +34,10 @@ export default function Layout({ children }) {
     { to: "/client/invoices", label: "Invoices", icon: Boxes },
   ];
   const adminLinks = [
-    { to: "/admin", label: "Admin Dashboard", icon: ShieldCheck, end: true },
-    { to: "/admin/clients", label: "Clients", icon: Boxes },
-  ];
+  { to: "/admin", label: "Admin Dashboard", icon: ShieldCheck, end: true },
+  { to: "/admin/clients", label: "Clients", icon: Boxes },
+  { to: "/admin/invite", label: "Invite client", icon: PlusCircle },
+];
   const links = role === "client" ? clientLinks : adminLinks;
 
   function handleLogout() {

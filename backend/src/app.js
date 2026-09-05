@@ -12,6 +12,7 @@ import adminRouter from "./routes/admin.js";
 import activitiesRouter from "./routes/activities.js";
 import notificationsRouter from "./routes/notifications.js";
 import uploadRouter from "./routes/upload.js";
+import invitesRouter from "./routes/invites.js";
 
 import { uploadsDir } from "./lib/storage.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
@@ -106,10 +107,13 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth", authRouter);
 
+app.use("/api/invites", invitesRouter);
+
 /*
  * Every route below requires a valid JWT, including file access. This
  * protects client attachments from being anonymously downloaded.
  */
+
 app.use(auth);
 
 app.use("/uploads", express.static(uploadsDir));
